@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import passport from './config/passport';
 import healthRoutes from './routes/health';
 import authRoutes from './routes/auth';
+import topicRoutes from './routes/topics';
 import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
@@ -38,6 +39,7 @@ app.get('/', (req: Request, res: Response) => {
     endpoints: {
       health: '/api/health',
       auth: '/api/auth',
+      quiz: '/api/quiz',
     },
   });
 });
@@ -47,6 +49,9 @@ app.use('/api', healthRoutes);
 
 // Auth routes
 app.use('/api/auth', authRoutes);
+
+// Quiz/Topic routes
+app.use('/api/quiz', topicRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);
