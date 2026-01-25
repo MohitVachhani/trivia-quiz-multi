@@ -2,7 +2,10 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import passport from './config/passport';
 import healthRoutes from './routes/health';
+import authRoutes from './routes/auth';
+import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
 
@@ -24,6 +27,9 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Initialize Passport
+app.use(passport.initialize());
+
 // Routes
 app.get('/', (req: Request, res: Response) => {
   res.json({
@@ -31,12 +37,19 @@ app.get('/', (req: Request, res: Response) => {
     version: '1.0.0',
     endpoints: {
       health: '/api/health',
+      auth: '/api/auth',
     },
   });
 });
 
 // Health check route
 app.use('/api', healthRoutes);
+
+// Auth routes
+app.use('/api/auth', authRoutes);
+
+// Error handling middleware (must be last)
+app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {
