@@ -7,6 +7,7 @@ import healthRoutes from './routes/health';
 import authRoutes from './routes/auth';
 import topicRoutes from './routes/topics';
 import lobbyRoutes from './routes/lobby';
+import gameRoutes from './routes/game';
 import { errorHandler } from './middleware/errorHandler';
 
 dotenv.config();
@@ -42,6 +43,7 @@ app.get('/', (req: Request, res: Response) => {
       auth: '/api/auth',
       quiz: '/api/quiz',
       lobby: '/api/lobby',
+      game: '/api/game',
     },
   });
 });
@@ -57,6 +59,9 @@ app.use('/api/quiz', topicRoutes);
 
 // Lobby routes
 app.use('/api/lobby', lobbyRoutes);
+
+// Game routes
+app.use('/api/game', gameRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

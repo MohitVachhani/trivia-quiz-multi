@@ -30,8 +30,11 @@ passport.use(
           return done(null, false, { message: 'Invalid email or password' });
         }
 
-        // Authentication successful
-        return done(null, user);
+        // Authentication successful - return simplified user object
+        return done(null, {
+          userId: user.id,
+          email: user.email,
+        });
       } catch (error) {
         return done(error);
       }

@@ -1,7 +1,6 @@
 import { pool } from '../config/database';
 import {
   Lobby,
-  CreateLobbyInput,
   findLobbyById,
   updateLobbyOwner,
   archiveLobby,
@@ -99,59 +98,6 @@ export async function isLobbyFull(lobbyId: string): Promise<boolean> {
   const players = await getLobbyPlayers(lobbyId);
 
   return players.length >= lobby.maxPlayers;
-}
-
-/**
- * Validate lobby settings
- */
-export function validateLobbySettings(settings: CreateLobbyInput): {
-  valid: boolean;
-  errors: string[];
-} {
-  const errors: string[] = [];
-
-  // Validate topicIds
-  if (!settings.topicIds || settings.topicIds.length === 0) {
-    errors.push('At least one topic must be selected');
-  }
-
-  // Validate UUID format for topicIds
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  settings.topicIds.forEach((id) => {
-    if (!uuidRegex.test(id)) {
-      errors.push(`Invalid topic ID format: ${id}`);
-    }
-  });
-
-  // Validate questionCount
-  if (settings.questionCount < 5 || settings.questionCount > 50) {
-    errors.push('Question count must be between 5 and 50');
-  }
-
-  // Validate difficulty distribution
-  const { easy, medium, hard } = settings.difficulty;
-
-  if (easy < 0 || medium < 0 || hard < 0) {
-    errors.push('Difficulty counts cannot be negative');
-  }
-
-  const totalDifficulty = easy + medium + hard;
-  if (totalDifficulty !== settings.questionCount) {
-    errors.push(
-      `Difficulty distribution (${totalDifficulty}) must equal question count (${settings.questionCount})`
-    );
-  }
-
-  // Validate maxPlayers
-  if (settings.maxPlayers < 2 || settings.maxPlayers > 10) {
-    errors.push('Max players must be between 2 and 10');
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
 }
 
 /**

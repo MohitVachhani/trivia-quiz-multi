@@ -17,10 +17,14 @@ import {
   getLobbyWithPlayers,
   areAllPlayersReady,
   isLobbyFull,
-  validateLobbySettings,
   handleOwnerLeave,
 } from '../services/lobbyService';
-import { getTopicById } from '../models/Topic';
+import { createGameFromLobby } from '../services/gameService';
+import {
+  validateCreateLobbyInput,
+  validateLobbyCode,
+  validateReadyStatus,
+} from '../validators/lobbyValidator';
 import { ApiError } from '../utils/ApiError';
 import { sendSuccess } from '../utils/apiResponse';
 
@@ -38,7 +42,7 @@ export async function createLobby(
     const { userId } = req.user!;
 
     // Validate input
-    const validation = validateLobbySettings({
+    const validation = await validateCreateLobbyInput({
       ownerId: userId,
       topicIds,
       questionCount,
@@ -51,17 +55,6 @@ export async function createLobby(
         'INVALID_LOBBY_SETTINGS',
         validation.errors.join(', ')
       );
-    }
-
-    // Verify all topics exist
-    for (const topicId of topicIds) {
-      const topic = await getTopicById(topicId);
-      if (!topic) {
-        throw ApiError.notFound(
-          'TOPIC_NOT_FOUND',
-          `Topic with ID ${topicId} not found`
-        );
-      }
     }
 
     // Create lobby
@@ -102,8 +95,13 @@ export async function joinLobby(
     const { code } = req.body;
     const { userId } = req.user!;
 
-    if (!code) {
-      throw ApiError.badRequest('MISSING_CODE', 'Lobby code is required');
+    // Validate lobby code
+    const codeValidation = validateLobbyCode(code);
+    if (!codeValidation.valid) {
+      throw ApiError.badRequest(
+        'INVALID_CODE',
+        codeValidation.errors.join(', ')
+      );
     }
 
     // Find lobby by code
@@ -200,10 +198,12 @@ export async function toggleReady(
     const { isReady } = req.body;
     const { userId } = req.user!;
 
-    if (typeof isReady !== 'boolean') {
+    // Validate ready status
+    const readyValidation = validateReadyStatus(isReady);
+    if (!readyValidation.valid) {
       throw ApiError.badRequest(
         'INVALID_READY_STATUS',
-        'isReady must be a boolean'
+        readyValidation.errors.join(', ')
       );
     }
 
@@ -334,19 +334,11 @@ export async function startGame(
       );
     }
 
-    // TODO: In Milestone 5, implement game creation logic here
-    // For now, return a placeholder message
-    throw ApiError.internal(
-      'GAME_CREATION_NOT_IMPLEMENTED',
-      'Game creation will be implemented in Milestone 5'
-    );
+    // Create game from lobby
+    const game = await createGameFromLobby(lobbyId);
 
-    // Future implementation:
-    // 1. Select questions using questionSelectionService
-    // 2. Create game record
-    // 3. Update lobby status to 'in_progress'
-    // 4. Set lobby.current_game_id
-    // 5. Return gameId
+    // Return game ID
+    sendSuccess(res, { gameId: game.id });
   } catch (error) {
     next(error);
   }

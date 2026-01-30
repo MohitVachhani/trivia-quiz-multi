@@ -13,7 +13,7 @@ export interface Lobby {
   ownerId: string;
   topicIds: string[];
   playerIds: string[];
-  status: 'waiting' | 'in_progress' | 'completed';
+  status: 'waiting' | 'starting' | 'in_progress' | 'completed';
   maxPlayers: number;
   questionCount: number;
   difficulty: DifficultyDistribution;

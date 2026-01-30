@@ -32,7 +32,6 @@ export async function comparePassword(
  */
 export function generateToken(userId: string, email: string): string {
   const secret = process.env.JWT_SECRET;
-  const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
 
   if (!secret) {
     throw new Error('JWT_SECRET is not defined in environment variables');
@@ -43,7 +42,9 @@ export function generateToken(userId: string, email: string): string {
     email,
   };
 
-  return jwt.sign(payload, secret, { expiresIn });
+  return jwt.sign(payload, secret, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  } as jwt.SignOptions);
 }
 
 /**
