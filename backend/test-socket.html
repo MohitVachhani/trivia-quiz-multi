@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Socket.io Test Client</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Socket.io Test Client</h1>
+    <div id="status">Disconnected</div>
+    <div>
+        <input type="text" id="token" placeholder="JWT Token" style="width: 400px;" />
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+    <div>
+        <input type="text" id="lobbyId" placeholder="Lobby ID" />
+        <button onclick="joinLobby()">Join Lobby</button>
+        <button onclick="toggleReady()">Toggle Ready</button>
+    </div>
+    <div id="events" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc; height: 400px; overflow-y: scroll;">
+        <h3>Events:</h3>
+    </div>
+
+    <script>
+        let socket = null;
+
+        function log(message) {
+            const events = document.getElementById('events');
+            const time = new Date().toLocaleTimeString();
+            events.innerHTML += `<div>[${time}] ${message}</div>`;
+            events.scrollTop = events.scrollHeight;
+        }
+
+        function connect() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                alert('Please enter a JWT token');
+                return;
+            }
+
+            socket = io('http://localhost:3001', {
+                auth: {
+                    token: token
+                }
+            });
+
+            socket.on('connect', () => {
+                document.getElementById('status').textContent = 'Connected';
+                log('Connected to server');
+            });
+
+            socket.on('disconnect', () => {
+                document.getElementById('status').textContent = 'Disconnected';
+                log('Disconnected from server');
+            });
+
+            socket.on('connect_error', (error) => {
+                log('Connection error: ' + error.message);
+            });
+
+            // Lobby events
+            socket.on('lobby:player_joined', (data) => {
+                log('lobby:player_joined - ' + JSON.stringify(data));
+            });
+
+            socket.on('lobby:player_ready_changed', (data) => {
+                log('lobby:player_ready_changed - ' + JSON.stringify(data));
+            });
+
+            socket.on('lobby:game_starting', (data) => {
+                log('lobby:game_starting - ' + JSON.stringify(data));
+            });
+
+            socket.on('lobby:player_left', (data) => {
+                log('lobby:player_left - ' + JSON.stringify(data));
+            });
+
+            // Game events
+            socket.on('game:started', (data) => {
+                log('game:started - ' + JSON.stringify(data));
+            });
+
+            socket.on('game:new_question', (data) => {
+                log('game:new_question - ' + JSON.stringify(data));
+            });
+
+            socket.on('game:player_answered', (data) => {
+                log('game:player_answered - ' + JSON.stringify(data));
+            });
+
+            socket.on('game:question_results', (data) => {
+                log('game:question_results - ' + JSON.stringify(data));
+            });
+
+            socket.on('game:leaderboard_update', (data) => {
+                log('game:leaderboard_update - ' + JSON.stringify(data));
+            });
+
+            socket.on('game:over', (data) => {
+                log('game:over - ' + JSON.stringify(data));
+            });
+
+            socket.on('error', (error) => {
+                log('Error: ' + JSON.stringify(error));
+            });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+            }
+        }
+
+        function joinLobby() {
+            const lobbyId = document.getElementById('lobbyId').value;
+            if (!socket || !lobbyId) {
+                alert('Please connect first and enter lobby ID');
+                return;
+            }
+
+            socket.emit('lobby:join', { lobbyId: lobbyId });
+            log('Sent: lobby:join with lobbyId: ' + lobbyId);
+        }
+
+        let isReady = false;
+        function toggleReady() {
+            const lobbyId = document.getElementById('lobbyId').value;
+            if (!socket || !lobbyId) {
+                alert('Please connect first and enter lobby ID');
+                return;
+            }
+
+            isReady = !isReady;
+            socket.emit('lobby:ready', { lobbyId: lobbyId, isReady: isReady });
+            log('Sent: lobby:ready with isReady: ' + isReady);
+        }
+    </script>
+</body>
+</html>

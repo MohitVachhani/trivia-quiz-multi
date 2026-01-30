@@ -34,6 +34,8 @@ import {
 import { checkAndCompleteGame } from './gameCompletionService';
 import { pool } from '../config/database';
 import { ApiError } from '../utils/ApiError';
+import { getIO } from '../server';
+import { emitGameStarted, emitPlayerAnswered, emitQuestionResults, emitLeaderboardUpdate, emitGameOver } from '../socket/handlers/gameHandlers';
 
 // Default time limit per question (in seconds)
 const DEFAULT_TIME_LIMIT = 30;
@@ -126,6 +128,12 @@ export async function createGameFromLobby(lobbyId: string): Promise<Game> {
 
   // Initialize Redis leaderboard
   await initializeLeaderboard(game.id, lobby.playerIds);
+
+  // Start game with a delay via Socket.io
+  const io = getIO();
+  setTimeout(() => {
+    emitGameStarted(io, game.id, lobby.id, lobby.playerIds);
+  }, 3000); // 3 second delay
 
   return game;
 }
@@ -269,7 +277,39 @@ export async function processAnswerSubmission(
 
   // Check if player completed all questions
   // Check if all players completed (end game)
-  await checkAndCompleteGame(gameId);
+  const gameCompleted = await checkAndCompleteGame(gameId);
+
+  // Emit Socket.io events
+  const io = getIO();
+  
+  // Get user email for events
+  const userQuery = await pool.query('SELECT email FROM trivia.users WHERE id = $1', [userId]);
+  const userEmail = userQuery.rows[0]?.email || 'Unknown';
+
+  // Emit player answered event
+  await emitPlayerAnswered(io, gameId, userId, userEmail);
+
+  // Emit question results to the specific player
+  emitQuestionResults(io, userId, {
+    isCorrect,
+    correctAnswerIds: question.correctAnswerIds,
+    explanation: question.explanation,
+    pointsEarned: points,
+    newScore
+  });
+
+  // Emit updated leaderboard
+  await emitLeaderboardUpdate(io, gameId);
+
+  // If game is completed, emit game over
+  if (gameCompleted) {
+    const leaderboard = await getLeaderboard(gameId);
+    const winner = leaderboard[0];
+    emitGameOver(io, gameId, {
+      winner,
+      leaderboard
+    });
+  }
 
   return {
     correct: isCorrect,

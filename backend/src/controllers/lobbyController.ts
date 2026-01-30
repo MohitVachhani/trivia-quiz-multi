@@ -27,6 +27,8 @@ import {
 } from '../validators/lobbyValidator';
 import { ApiError } from '../utils/ApiError';
 import { sendSuccess } from '../utils/apiResponse';
+import { getIO } from '../server';
+import { emitPlayerLeft, emitGameStarting } from '../socket/handlers/lobbyHandlers';
 
 /**
  * POST /api/lobby/create
@@ -276,6 +278,15 @@ export async function leaveLobby(
       await handleOwnerLeave(lobbyId);
     }
 
+    // Get updated lobby to emit to remaining players
+    try {
+      const updatedLobby = await getLobbyWithPlayers(lobbyId);
+      const io = getIO();
+      emitPlayerLeft(io, lobbyId, userId, updatedLobby.players);
+    } catch (lobbyError) {
+      // Lobby might have been archived, ignore
+    }
+
     sendSuccess(res, { message: 'Left lobby successfully' });
   } catch (error) {
     next(error);
@@ -336,6 +347,10 @@ export async function startGame(
 
     // Create game from lobby
     const game = await createGameFromLobby(lobbyId);
+
+    // Emit game starting event via Socket.io
+    const io = getIO();
+    emitGameStarting(io, lobbyId, game.id);
 
     // Return game ID
     sendSuccess(res, { gameId: game.id });

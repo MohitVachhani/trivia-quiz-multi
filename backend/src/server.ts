@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
@@ -9,11 +10,21 @@ import topicRoutes from './routes/topics';
 import lobbyRoutes from './routes/lobby';
 import gameRoutes from './routes/game';
 import { errorHandler } from './middleware/errorHandler';
+import { initializeSocket } from './socket';
 
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
+
+// Initialize Socket.io
+export const io = initializeSocket(server);
+
+// Make io available to services
+export function getIO() {
+  return io;
+}
 
 // Security middleware
 app.use(helmet());
@@ -67,9 +78,10 @@ app.use('/api/game', gameRoutes);
 app.use(errorHandler);
 
 // Start server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
   console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔌 Socket.io initialized`);
 });
 
 export default app;
