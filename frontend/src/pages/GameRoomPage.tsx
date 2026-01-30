@@ -1,53 +1,137 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Copy, Check, Crown, Play, Settings } from 'lucide-react';
+import { ArrowLeft, Copy, Check, Crown, Play, LogOut, AlertCircle } from 'lucide-react';
 import { useStore } from '../store/useStore';
-
-// Mock data - will be replaced with real data from WebSocket
-const MOCK_ROOM_CODE = 'TRIVIA-2024';
-const MOCK_PLAYERS = [
-  { id: 'user_1', email: 'you@example.com', isOwner: true, isReady: false },
-  { id: 'user_2', email: 'michael@dundermifflin.com', isOwner: false, isReady: true },
-  { id: 'user_3', email: 'jim@dundermifflin.com', isOwner: false, isReady: false },
-  { id: 'user_4', email: 'dwight@dundermifflin.com', isOwner: false, isReady: true },
-];
+import { lobbyAPI } from '../services/api';
+import { socketService } from '../services/socket';
 
 export default function GameRoomPage() {
   const navigate = useNavigate();
-  const { user } = useStore();
-  const [players, setPlayers] = useState(MOCK_PLAYERS);
-  const [copied, setCopied] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const {
+    currentLobby,
+    user,
+    setCurrentLobby,
+    setError,
+    error,
+    setIsLoading,
+    isLoading,
+    updateLobbyPlayers,
+    updatePlayerReady,
+  } = useStore();
 
-  const currentPlayer = players.find((p) => p.email === user?.email) || players[0];
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!currentLobby) {
+      navigate('/multiplayer');
+      return;
+    }
+
+    // Join the lobby via socket
+    if (socketService.isConnected()) {
+      socketService.joinLobby(currentLobby.id);
+    }
+
+    // Set up socket listeners for lobby events
+    const handlePlayerJoined = ({ players }: { players: any[] }) => {
+      updateLobbyPlayers(players);
+    };
+
+    const handlePlayerReadyChanged = ({ playerId, isReady }: { playerId: string; isReady: boolean }) => {
+      updatePlayerReady(playerId, isReady);
+    };
+
+    const handlePlayerLeft = ({ players }: { players: any[] }) => {
+      updateLobbyPlayers(players);
+    };
+
+    const handleGameStarting = () => {
+      // Navigate to quiz page
+      navigate('/quiz');
+    };
+
+    socketService.onLobbyPlayerJoined(handlePlayerJoined);
+    socketService.onLobbyPlayerReadyChanged(handlePlayerReadyChanged);
+    socketService.onLobbyPlayerLeft(handlePlayerLeft);
+    socketService.onLobbyGameStarting(handleGameStarting);
+
+    // Cleanup on unmount
+    return () => {
+      socketService.offLobbyPlayerJoined(handlePlayerJoined);
+      socketService.offLobbyPlayerReadyChanged(handlePlayerReadyChanged);
+      socketService.offLobbyPlayerLeft(handlePlayerLeft);
+      socketService.offLobbyGameStarting(handleGameStarting);
+    };
+  }, [currentLobby, navigate, updateLobbyPlayers, updatePlayerReady]);
+
+  if (!currentLobby || !user) {
+    navigate('/multiplayer');
+    return null;
+  }
+
+  const currentPlayer = currentLobby.players.find((p) => p.id === user.id);
   const isOwner = currentPlayer?.isOwner || false;
-  const readyCount = players.filter((p) => p.isReady).length;
+  const readyCount = currentLobby.players.filter((p) => p.isReady).length;
+  const canStartGame = isOwner && readyCount === currentLobby.players.length && currentLobby.players.length >= 2;
 
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(MOCK_ROOM_CODE);
+    navigator.clipboard.writeText(currentLobby.code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleToggleReady = () => {
-    setPlayers((prev) =>
-      prev.map((p) =>
-        p.id === currentPlayer.id ? { ...p, isReady: !p.isReady } : p
-      )
-    );
-  };
+  const handleToggleReady = async () => {
+    if (!currentPlayer) return;
 
-  const handleStartGame = () => {
-    if (isOwner) {
-      // Show settings modal first
-      setShowSettings(true);
+    try {
+      const newReadyState = !currentPlayer.isReady;
+      
+      // Update locally first for better UX
+      updatePlayerReady(user.id, newReadyState);
+      
+      // Send to server via socket
+      if (socketService.isConnected()) {
+        socketService.setLobbyReady(currentLobby.id, newReadyState);
+      }
+      
+      // Also send to REST API for persistence
+      await lobbyAPI.setReady(currentLobby.id, newReadyState);
+    } catch (err) {
+      console.error('Failed to update ready status:', err);
+      setError('Failed to update ready status');
+      // Revert local change
+      updatePlayerReady(user.id, !currentPlayer.isReady);
     }
   };
 
-  const handleConfirmStart = () => {
-    // TODO: API call to start game
-    setShowSettings(false);
-    navigate('/quiz');
+  const handleStartGame = async () => {
+    if (!canStartGame) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await lobbyAPI.start(currentLobby.id);
+      // The game start will be handled by socket event
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to start game';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLeaveLobby = async () => {
+    try {
+      await lobbyAPI.leave(currentLobby.id);
+      setCurrentLobby(null);
+      navigate('/multiplayer');
+    } catch (err) {
+      console.error('Failed to leave lobby:', err);
+      // Navigate anyway
+      setCurrentLobby(null);
+      navigate('/multiplayer');
+    }
   };
 
   return (
@@ -56,23 +140,33 @@ export default function GameRoomPage() {
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <button
-            onClick={() => navigate('/multiplayer')}
+            onClick={handleLeaveLobby}
             className="p-2 hover:bg-white rounded-xl transition-colors"
           >
             <ArrowLeft className="w-6 h-6" />
           </button>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Game Room</h1>
-            <p className="text-gray-500 mt-1">Waiting for players...</p>
+            <p className="text-gray-500 mt-1">
+              {currentLobby.status === 'waiting' ? 'Waiting for players...' : 'Game starting...'}
+            </p>
           </div>
         </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <p className="text-red-700 text-sm">{error}</p>
+          </div>
+        )}
 
         {/* Room Code Card */}
         <div className="glass-card p-6 mb-6 flex items-center justify-between">
           <div>
             <p className="text-sm text-gray-500 mb-1">Room Code</p>
             <p className="text-2xl font-mono font-bold text-gray-900 tracking-wider">
-              {MOCK_ROOM_CODE}
+              {currentLobby.code}
             </p>
           </div>
           <button
@@ -93,24 +187,49 @@ export default function GameRoomPage() {
           </button>
         </div>
 
+        {/* Game Settings Info */}
+        <div className="glass-card p-6 mb-6">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Game Settings</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-sm text-gray-500">Questions</p>
+              <p className="font-semibold text-gray-900">{currentLobby.questionCount}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Max Players</p>
+              <p className="font-semibold text-gray-900">{currentLobby.maxPlayers}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Easy</p>
+              <p className="font-semibold text-gray-900">{currentLobby.difficulty.easy}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Medium</p>
+              <p className="font-semibold text-gray-900">{currentLobby.difficulty.medium}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Hard</p>
+              <p className="font-semibold text-gray-900">{currentLobby.difficulty.hard}</p>
+            </div>
+          </div>
+        </div>
+
         {/* Players List */}
         <div className="glass-card p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900">
-              Players ({players.length})
+              Players ({currentLobby.players.length}/{currentLobby.maxPlayers})
             </h2>
             <p className="text-sm">
               <span className="text-green-600 font-semibold">{readyCount} Ready</span>
-              <span className="text-gray-400"> / {players.length}</span>
+              <span className="text-gray-400"> / {currentLobby.players.length}</span>
             </p>
           </div>
 
           <div className="space-y-3">
-            {players.map((player) => {
-              const isCurrentUser = player.id === currentPlayer.id;
-              const playerName = player.isOwner
-                ? 'You'
-                : player.email.split('@')[0];
+            {currentLobby.players.map((player) => {
+              const isCurrentUser = player.id === user.id;
+              const playerName = player.email.split('@')[0];
 
               return (
                 <div
@@ -167,118 +286,46 @@ export default function GameRoomPage() {
         </div>
 
         {/* Action Buttons */}
-        <div className="space-y-3">
-          {isOwner ? (
-            <button
-              onClick={handleStartGame}
-              disabled={readyCount < players.length}
-              className="btn-gradient w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Play className="w-5 h-5" fill="currentColor" />
-              Start Game
-              {readyCount < players.length && (
-                <span className="text-sm">
-                  (Wait for all players to be ready)
-                </span>
-              )}
-            </button>
-          ) : (
-            <button
-              onClick={handleToggleReady}
-              className={`w-full py-3 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
-                currentPlayer.isReady
-                  ? 'bg-white border-2 border-gray-300 text-gray-700 hover:border-gray-400'
-                  : 'btn-gradient'
-              }`}
-            >
-              <Play className="w-5 h-5" fill="currentColor" />
-              {currentPlayer.isReady ? 'Mark as Not Ready' : 'Mark as Ready'}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="glass-card p-8 max-w-md w-full">
-            <div className="flex items-center gap-3 mb-6">
-              <Settings className="w-6 h-6 text-primary-600" />
-              <h3 className="text-2xl font-bold text-gray-900">Game Settings</h3>
-            </div>
-
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Topic
-                </label>
-                <select className="input-field">
-                  <option>The Office</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Number of Questions
-                </label>
-                <select className="input-field">
-                  <option value="5">5 Questions</option>
-                  <option value="10" selected>
-                    10 Questions
-                  </option>
-                  <option value="15">15 Questions</option>
-                  <option value="20">20 Questions</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Difficulty Mix
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  <input
-                    type="number"
-                    placeholder="Easy"
-                    defaultValue="4"
-                    min="0"
-                    className="input-field text-center"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Medium"
-                    defaultValue="4"
-                    min="0"
-                    className="input-field text-center"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Hard"
-                    defaultValue="2"
-                    min="0"
-                    className="input-field text-center"
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Easy / Medium / Hard</p>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
+        <div className="flex gap-3">
+          <button
+            onClick={handleLeaveLobby}
+            className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:border-gray-400 transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            Leave
+          </button>
+          
+          <div className="flex-1">
+            {isOwner ? (
               <button
-                onClick={() => setShowSettings(false)}
-                className="flex-1 py-3 px-6 bg-white border-2 border-gray-300 text-gray-700 font-semibold rounded-xl hover:border-gray-400 transition-colors"
+                onClick={handleStartGame}
+                disabled={!canStartGame || isLoading}
+                className="btn-gradient w-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Cancel
+                <Play className="w-5 h-5" fill="currentColor" />
+                {isLoading ? 'Starting...' : 'Start Game'}
+                {!canStartGame && !isLoading && (
+                  <span className="text-sm">
+                    ({readyCount < currentLobby.players.length ? 'Wait for all players' : 'Need at least 2 players'})
+                  </span>
+                )}
               </button>
+            ) : (
               <button
-                onClick={handleConfirmStart}
-                className="flex-1 btn-gradient"
+                onClick={handleToggleReady}
+                className={`w-full py-3 px-6 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 ${
+                  currentPlayer?.isReady
+                    ? 'bg-white border-2 border-gray-300 text-gray-700 hover:border-gray-400'
+                    : 'btn-gradient'
+                }`}
               >
-                Start Game
+                <Play className="w-5 h-5" fill="currentColor" />
+                {currentPlayer?.isReady ? 'Mark as Not Ready' : 'Mark as Ready'}
               </button>
-            </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

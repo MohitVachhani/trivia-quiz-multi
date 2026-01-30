@@ -1,43 +1,41 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Brain, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Brain, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useStore } from '../store/useStore';
+import { authAPI } from '../services/api';
 
 type Tab = 'login' | 'signup';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { setUser, setToken } = useStore();
+  const { setUser, setToken, setError, setIsLoading, isLoading, error } = useStore();
   const [activeTab, setActiveTab] = useState<Tab>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
 
-    // TODO: Replace with actual API call
-    setTimeout(() => {
-      // Mock authentication
-      const mockUser = {
-        id: 'user_123',
-        email: email,
-        stats: {
-          gamesPlayed: 247,
-          victories: 156,
-          timePlayed: '12h',
-          totalPoints: 45600,
-        },
-      };
-      const mockToken = 'mock_jwt_token';
+    try {
+      let response;
+      if (activeTab === 'signup') {
+        response = await authAPI.signup(email, password);
+      } else {
+        response = await authAPI.login(email, password);
+      }
 
-      setUser(mockUser);
-      setToken(mockToken);
-      setIsLoading(false);
+      setUser(response.user);
+      setToken(response.token);
       navigate('/game-mode');
-    }, 1000);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Authentication failed';
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -81,6 +79,14 @@ export default function LoginPage() {
               Sign Up
             </button>
           </div>
+
+          {/* Error Display */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <p className="text-red-700 text-sm">{error}</p>
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">

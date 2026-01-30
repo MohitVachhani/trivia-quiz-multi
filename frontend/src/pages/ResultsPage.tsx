@@ -1,61 +1,31 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Home, RotateCcw, Star, Medal } from 'lucide-react';
-
-// Mock data
-const MOCK_RESULTS = {
-  gameId: 'game_123',
-  topic: 'The Office Trivia',
-  totalQuestions: 10,
-  winner: {
-    playerId: 'user_2',
-    playerName: 'Michael Scott',
-    score: 1500,
-  },
-  leaderboard: [
-    {
-      rank: 2,
-      playerId: 'user_4',
-      playerName: 'Dwight Schrute',
-      score: 1450,
-      correctAnswers: 9,
-    },
-    {
-      rank: 1,
-      playerId: 'user_2',
-      playerName: 'Michael Scott',
-      score: 1500,
-      correctAnswers: 10,
-    },
-    {
-      rank: 3,
-      playerId: 'user_3',
-      playerName: 'Jim Halpert',
-      score: 1350,
-      correctAnswers: 9,
-    },
-  ],
-  otherPlayers: [
-    {
-      rank: 4,
-      playerId: 'user_1',
-      playerName: 'You',
-      score: 1200,
-      correctAnswers: 7,
-    },
-  ],
-  yourPerformance: {
-    rank: 4,
-    score: 1200,
-    correctAnswers: 7,
-    totalQuestions: 10,
-  },
-};
+import { useStore } from '../store/useStore';
 
 export default function ResultsPage() {
   const navigate = useNavigate();
+  const { gameResults, user, setCurrentLobby, setCurrentGame, setGameResults } = useStore();
 
-  const podium = MOCK_RESULTS.leaderboard.sort((a, b) => a.rank - b.rank);
-  const [first, second, third] = podium;
+  useEffect(() => {
+    if (!gameResults) {
+      // If no game results, redirect to home
+      navigate('/game-mode');
+    }
+  }, [gameResults, navigate]);
+
+  if (!gameResults || !user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Loading results...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const podiumPlayers = gameResults.finalLeaderboard.filter(p => p.rank <= 3).sort((a, b) => a.rank - b.rank);
+  const otherPlayers = gameResults.finalLeaderboard.filter(p => p.rank > 3);
 
   const getTrophyIcon = (rank: number) => {
     switch (rank) {
@@ -67,6 +37,38 @@ export default function ResultsPage() {
         return <Medal className="w-8 h-8 text-orange-400" />;
       default:
         return null;
+    }
+  };
+
+  const handlePlayAgain = () => {
+    // Clear current game state and go to multiplayer lobby
+    setCurrentLobby(null);
+    setCurrentGame(null);
+    setGameResults(null);
+    navigate('/multiplayer');
+  };
+
+  const handleGoHome = () => {
+    // Clear all game state and go home
+    setCurrentLobby(null);
+    setCurrentGame(null);
+    setGameResults(null);
+    navigate('/game-mode');
+  };
+
+  const getRankSuffix = (rank: number) => {
+    const lastDigit = rank % 10;
+    const lastTwoDigits = rank % 100;
+    
+    if (lastTwoDigits >= 11 && lastTwoDigits <= 13) {
+      return 'th';
+    }
+    
+    switch (lastDigit) {
+      case 1: return 'st';
+      case 2: return 'nd';
+      case 3: return 'rd';
+      default: return 'th';
     }
   };
 
@@ -82,7 +84,7 @@ export default function ResultsPage() {
           </div>
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Game Over!</h1>
           <p className="text-gray-600">
-            {MOCK_RESULTS.topic} • {MOCK_RESULTS.totalQuestions} Questions
+            {gameResults.totalQuestions} Questions
           </p>
         </div>
 
@@ -92,10 +94,10 @@ export default function ResultsPage() {
             <Star className="w-8 h-8 text-yellow-500 mx-auto mb-2" fill="currentColor" />
             <p className="text-sm text-gray-600 mb-1">Winner</p>
             <h2 className="text-3xl font-bold text-gray-900 mb-2">
-              {MOCK_RESULTS.winner.playerName}
+              {gameResults.winner.playerId === user.id ? 'You' : gameResults.winner.playerName}
             </h2>
             <p className="text-2xl font-bold text-primary-600">
-              {MOCK_RESULTS.winner.score.toLocaleString()} points
+              {gameResults.winner.score.toLocaleString()} points
             </p>
           </div>
         </div>
@@ -103,62 +105,85 @@ export default function ResultsPage() {
         {/* Podium */}
         <div className="grid grid-cols-3 gap-4 mb-6 items-end">
           {/* Second Place */}
-          {second && (
-            <div className="glass-card p-6 text-center">
+          {podiumPlayers[1] && (
+            <div className={`glass-card p-6 text-center ${
+              podiumPlayers[1].playerId === user.id ? 'bg-primary-50 border-2 border-primary-500' : ''
+            }`}>
               <div className="flex justify-center mb-3">
                 {getTrophyIcon(2)}
               </div>
               <p className="text-sm text-gray-500 mb-1">2nd</p>
-              <p className="font-bold text-gray-900 mb-1">{second.playerName}</p>
-              <p className="text-lg font-bold text-primary-600">{second.score}</p>
+              <p className="font-bold text-gray-900 mb-1">
+                {podiumPlayers[1].playerId === user.id ? 'You' : podiumPlayers[1].playerName}
+              </p>
+              <p className="text-lg font-bold text-primary-600">{podiumPlayers[1].score.toLocaleString()}</p>
+              <p className="text-sm text-gray-600">{podiumPlayers[1].correctAnswers} correct</p>
             </div>
           )}
 
           {/* First Place */}
-          {first && (
-            <div className="glass-card p-6 text-center bg-gradient-to-b from-yellow-50 to-white border-2 border-yellow-300 transform scale-105">
+          {podiumPlayers[0] && (
+            <div className={`glass-card p-6 text-center transform scale-105 ${
+              podiumPlayers[0].playerId === user.id 
+                ? 'bg-gradient-to-b from-yellow-100 to-primary-50 border-2 border-yellow-400' 
+                : 'bg-gradient-to-b from-yellow-50 to-white border-2 border-yellow-300'
+            }`}>
               <div className="flex justify-center mb-3">
                 {getTrophyIcon(1)}
               </div>
               <p className="text-sm text-gray-500 mb-1">1st</p>
-              <p className="font-bold text-gray-900 mb-1">{first.playerName}</p>
-              <p className="text-xl font-bold text-primary-600">{first.score}</p>
+              <p className="font-bold text-gray-900 mb-1">
+                {podiumPlayers[0].playerId === user.id ? 'You' : podiumPlayers[0].playerName}
+              </p>
+              <p className="text-xl font-bold text-primary-600">{podiumPlayers[0].score.toLocaleString()}</p>
+              <p className="text-sm text-gray-600">{podiumPlayers[0].correctAnswers} correct</p>
             </div>
           )}
 
           {/* Third Place */}
-          {third && (
-            <div className="glass-card p-6 text-center">
+          {podiumPlayers[2] && (
+            <div className={`glass-card p-6 text-center ${
+              podiumPlayers[2].playerId === user.id ? 'bg-primary-50 border-2 border-primary-500' : ''
+            }`}>
               <div className="flex justify-center mb-3">
                 {getTrophyIcon(3)}
               </div>
               <p className="text-sm text-gray-500 mb-1">3rd</p>
-              <p className="font-bold text-gray-900 mb-1">{third.playerName}</p>
-              <p className="text-lg font-bold text-primary-600">{third.score}</p>
+              <p className="font-bold text-gray-900 mb-1">
+                {podiumPlayers[2].playerId === user.id ? 'You' : podiumPlayers[2].playerName}
+              </p>
+              <p className="text-lg font-bold text-primary-600">{podiumPlayers[2].score.toLocaleString()}</p>
+              <p className="text-sm text-gray-600">{podiumPlayers[2].correctAnswers} correct</p>
             </div>
           )}
         </div>
 
-        {/* Other Players */}
-        {MOCK_RESULTS.otherPlayers.length > 0 && (
+        {/* Other Players (4th place and below) */}
+        {otherPlayers.length > 0 && (
           <div className="glass-card p-6 mb-6">
             <h3 className="text-lg font-bold text-gray-900 mb-4">Other Players</h3>
             <div className="space-y-3">
-              {MOCK_RESULTS.otherPlayers.map((player) => (
+              {otherPlayers.map((player) => (
                 <div
                   key={player.playerId}
-                  className="p-4 bg-primary-50 border-2 border-primary-500 rounded-xl"
+                  className={`p-4 rounded-xl ${
+                    player.playerId === user.id
+                      ? 'bg-primary-50 border-2 border-primary-500'
+                      : 'bg-white border border-gray-200'
+                  }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center text-white font-bold">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
+                        player.playerId === user.id ? 'bg-gradient-primary' : 'bg-gray-400'
+                      }`}>
                         {player.rank}
                       </div>
                       <div>
                         <p className="font-semibold text-gray-900">
-                          {player.playerName}{' '}
-                          <span className="text-gray-500 text-sm">(You)</span>
+                          {player.playerId === user.id ? 'You' : player.playerName}
                         </p>
+                        <p className="text-sm text-gray-600">{player.correctAnswers} correct answers</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -173,43 +198,53 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Your Performance */}
+        {/* Your Performance Summary */}
         <div className="glass-card p-6 mb-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4">Your Performance</h3>
           <div className="grid grid-cols-3 gap-4">
             <div className="text-center">
               <p className="text-3xl font-bold text-primary-600 mb-1">
-                {MOCK_RESULTS.yourPerformance.correctAnswers}/
-                {MOCK_RESULTS.yourPerformance.totalQuestions}
+                {gameResults.yourPerformance.correctAnswers}/
+                {gameResults.yourPerformance.totalQuestions}
               </p>
               <p className="text-sm text-gray-600">Correct</p>
             </div>
             <div className="text-center">
               <p className="text-3xl font-bold text-primary-600 mb-1">
-                {MOCK_RESULTS.yourPerformance.score.toLocaleString()}
+                {gameResults.yourPerformance.score.toLocaleString()}
               </p>
               <p className="text-sm text-gray-600">Points</p>
             </div>
             <div className="text-center">
               <p className="text-3xl font-bold text-yellow-500 mb-1">
-                #{MOCK_RESULTS.yourPerformance.rank}
+                {gameResults.yourPerformance.rank}{getRankSuffix(gameResults.yourPerformance.rank)}
               </p>
-              <p className="text-sm text-gray-600">Rank</p>
+              <p className="text-sm text-gray-600">Place</p>
             </div>
+          </div>
+          
+          {/* Performance Message */}
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-blue-900 text-center">
+              {gameResults.yourPerformance.rank === 1 && "🎉 Congratulations! You won!"}
+              {gameResults.yourPerformance.rank === 2 && "🥈 Great job! Second place!"}
+              {gameResults.yourPerformance.rank === 3 && "🥉 Well done! Third place!"}
+              {gameResults.yourPerformance.rank > 3 && `You finished in ${gameResults.yourPerformance.rank}${getRankSuffix(gameResults.yourPerformance.rank)} place. Keep practicing!`}
+            </p>
           </div>
         </div>
 
         {/* Action Buttons */}
         <div className="grid grid-cols-2 gap-4">
           <button
-            onClick={() => navigate('/game-room')}
+            onClick={handlePlayAgain}
             className="py-4 px-6 bg-white border-2 border-primary-500 text-primary-600 font-semibold rounded-xl hover:bg-primary-50 transition-colors flex items-center justify-center gap-2"
           >
             <RotateCcw className="w-5 h-5" />
             Play Again
           </button>
           <button
-            onClick={() => navigate('/game-mode')}
+            onClick={handleGoHome}
             className="btn-gradient py-4 px-6 flex items-center justify-center gap-2"
           >
             <Home className="w-5 h-5" />

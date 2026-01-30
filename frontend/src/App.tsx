@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
+import { useSocketConnection } from './hooks/useSocketConnection';
 import LoginPage from './pages/LoginPage';
 import GameModePage from './pages/GameModePage';
 import MultiplayerLobbyPage from './pages/MultiplayerLobbyPage';
@@ -19,6 +20,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  // Initialize socket connection for authenticated users
+  useSocketConnection();
+
   return (
     <BrowserRouter>
       <Routes>

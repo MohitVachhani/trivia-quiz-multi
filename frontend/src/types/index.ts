@@ -19,25 +19,44 @@ export interface AuthState {
   isAuthenticated: boolean;
 }
 
+// Topic Types
+export interface Topic {
+  id: string;
+  name: string;
+  description: string;
+  questionsCount: number;
+}
+
 // Lobby Types
 export interface Lobby {
   id: string;
   code: string;
   ownerId: string;
+  topicIds: string[];
+  playerIds: string[];
   settings: GameSettings;
   players: Player[];
   status: 'waiting' | 'starting' | 'in_progress' | 'completed';
-  createdAt: string;
-}
-
-export interface GameSettings {
-  topic: string;
+  maxPlayers: number;
   questionCount: number;
   difficulty: {
     easy: number;
     medium: number;
     hard: number;
   };
+  createdAt: string;
+  expiresAt?: string;
+}
+
+export interface GameSettings {
+  topicIds: string[];
+  questionCount: number;
+  difficulty: {
+    easy: number;
+    medium: number;
+    hard: number;
+  };
+  maxPlayers: number;
 }
 
 export interface Player {
@@ -50,12 +69,13 @@ export interface Player {
 // Quiz/Game Types
 export interface Question {
   id: string;
-  questionNumber: number;
-  totalQuestions: number;
+  type: 'single_correct' | 'multi_correct' | 'true_false';
   difficulty: 'easy' | 'medium' | 'hard';
   text: string;
   options: QuestionOption[];
   timeLimit: number;
+  questionNumber?: number;
+  totalQuestions?: number;
 }
 
 export interface QuestionOption {
@@ -75,27 +95,33 @@ export interface LeaderboardEntry {
 export interface GameState {
   id: string;
   lobbyId: string;
-  topic: string;
+  status: 'waiting' | 'in_progress' | 'completed';
   currentQuestionIndex: number;
   totalQuestions: number;
-  status: 'waiting' | 'in_progress' | 'completed';
   currentQuestion: Question | null;
   leaderboard: LeaderboardEntry[];
   timeRemaining: number;
-  selectedAnswer: string | null;
+  selectedAnswer: string | string[] | null;
+  selectedAnswers: string[];
   hasAnswered: boolean;
+  players: Array<{
+    id: string;
+    email: string;
+    score: number;
+    progress: number;
+  }>;
 }
 
 export interface GameResults {
   gameId: string;
-  topic: string;
+  status: 'completed';
   totalQuestions: number;
   winner: {
     playerId: string;
     playerName: string;
     score: number;
   };
-  leaderboard: LeaderboardEntry[];
+  finalLeaderboard: LeaderboardEntry[];
   yourPerformance: {
     rank: number;
     score: number;

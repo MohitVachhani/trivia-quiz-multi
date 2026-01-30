@@ -10,6 +10,7 @@
     "db:seed": "tsx src/utils/seed.ts",
     "db:reset": "tsx src/utils/resetDb.ts && npm run migrate:up && npm run db:seed",
     "db:verify": "tsx src/utils/verifyDb.ts",
+    "db:import-questions": "tsx scripts/importQuestions.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
